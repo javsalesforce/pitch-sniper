@@ -11,6 +11,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Calls the Server Action (Gemini V3)
   async function handleRoast() {
     if (!bio) return;
     setLoading(true);
@@ -20,6 +21,7 @@ export default function Home() {
     setLoading(false);
   }
 
+  // Copies the pitch to clipboard
   const copyToClipboard = () => {
     if (!result?.pitch) return;
     const text = `Subject: ${result.pitch.subject}\n\n${result.pitch.body}`;
@@ -61,6 +63,7 @@ export default function Home() {
           </div>
         </div>
 
+        {/* LOADING STATE (SHIMMER) */}
         {loading && (
           <div className="space-y-4 animate-pulse">
             <div className="h-24 bg-zinc-900 rounded-xl border border-zinc-800" />
@@ -72,14 +75,14 @@ export default function Home() {
         {result && !result.error && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
             
-            {/* THE ROAST */}
+            {/* 1. THE ROAST */}
             <div className="bg-red-950/20 border border-red-900/30 p-6 rounded-xl relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               <h3 className="text-red-400 font-bold mb-2 text-xs uppercase tracking-widest flex items-center gap-2">🔥 The Reality Check</h3>
               <p className="text-red-200/90 italic text-lg font-serif">"{result.roast}"</p>
             </div>
 
-            {/* THE PITCH */}
+            {/* 2. THE PITCH */}
             <div className="bg-emerald-950/20 border border-emerald-900/30 rounded-xl overflow-hidden shadow-lg shadow-emerald-900/10">
               <div className="bg-emerald-950/40 p-4 border-b border-emerald-900/30 flex justify-between items-center">
                  <h3 className="text-emerald-400 font-bold text-xs uppercase tracking-widest flex items-center gap-2">✨ The Pitch</h3>
@@ -102,7 +105,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* === THE GOLD BOX (MONETIZATION UPSELL) === */}
+            {/* 3. THE GOLD BOX (WAITLIST UPSELL) */}
             <div className="relative overflow-hidden rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-950/40 to-black p-6 md:p-8">
               <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-amber-500/20 blur-2xl"></div>
               
@@ -120,7 +123,9 @@ export default function Home() {
                 
                 <div className="shrink-0">
                   <a 
-                    href="#" 
+                    href="https://tally.so/r/Gx9Jxz" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
                     className="inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-black font-bold py-3 px-6 rounded-lg transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:shadow-[0_0_30px_rgba(245,158,11,0.5)] transform hover:-translate-y-1"
                   >
                     <TrendingUp className="w-4 h-4" />
