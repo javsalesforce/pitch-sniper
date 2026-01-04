@@ -1,27 +1,48 @@
-// app/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { generatePitch } from './actions';
-import { Copy, Check, Loader2, Send, Sparkles, TrendingUp, ShieldCheck } from 'lucide-react';
+import { Copy, Check, Loader2, Send, Sparkles, TrendingUp, ShieldCheck, Paperclip, X, ImageIcon } from 'lucide-react';
 
 export default function Home() {
   const [bio, setBio] = useState('');
+  const [image, setImage] = useState<string | null>(null); // Stores base64
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Calls the Server Action (Gemini V3)
+  // Handle File Upload
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Convert to Base64
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   async function handleRoast() {
-    if (!bio) return;
+    if (!bio && !image) return; // Must have one
     setLoading(true);
     setResult(null);
-    const data = await generatePitch(bio);
+    
+    // Pass both text and image (server handles logic)
+    const data = await generatePitch(bio, image);
+    
     if (data) setResult(data);
     setLoading(false);
   }
 
-  // Copies the pitch to clipboard
   const copyToClipboard = () => {
     if (!result?.pitch) return;
     const text = `Subject: ${result.pitch.subject}\n\n${result.pitch.body}`;
@@ -41,29 +62,67 @@ export default function Home() {
              <span className="text-xs font-medium text-zinc-400 tracking-wide uppercase">AI Sales Assistant</span>
           </div>
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">PitchSniper</h1>
-          <p className="text-lg text-zinc-500 max-w-lg mx-auto">Paste a prospect's bio. Get a perfect LinkedIn DM script.</p>
+          <p className="text-lg text-zinc-500 max-w-lg mx-auto">Paste a bio OR upload a screenshot.</p>
         </div>
 
         {/* INPUT AREA */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-1 shadow-2xl backdrop-blur-sm focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-1 shadow-2xl backdrop-blur-sm focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all relative">
+          
           <textarea 
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             className="w-full h-40 bg-transparent border-none p-4 text-zinc-100 placeholder:text-zinc-600 focus:ring-0 resize-none leading-relaxed"
-            placeholder="Paste LinkedIn 'About' section here..."
+            placeholder="Paste text here, or attach a screenshot..."
           />
-          <div className="p-2 border-t border-zinc-800/50 bg-zinc-900/50 rounded-b-lg">
+
+          {/* Image Preview (If uploaded) */}
+          {image && (
+            <div className="mx-4 mb-2 p-2 bg-zinc-800 rounded-lg flex items-center gap-3 w-fit border border-zinc-700">
+              <ImageIcon className="w-4 h-4 text-indigo-400" />
+              <span className="text-xs text-zinc-300">Screenshot Attached</span>
+              <button onClick={removeImage} className="hover:text-red-400 text-zinc-500 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Toolbar */}
+          <div className="p-2 border-t border-zinc-800/50 bg-zinc-900/50 rounded-b-lg flex gap-2">
+            
+            {/* Hidden File Input */}
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileChange} 
+              accept="image/*" 
+              className="hidden" 
+            />
+
+            {/* Paperclip Button */}
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white p-3 rounded-lg transition-all"
+              title="Upload Screenshot"
+            >
+              <Paperclip className="w-5 h-5" />
+            </button>
+
+            {/* Generate Button */}
             <button 
               onClick={handleRoast}
-              disabled={loading || !bio}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-semibold py-3 px-6 rounded-lg transition-all flex justify-center items-center gap-2 group"
+              disabled={loading || (!bio && !image)}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-semibold py-3 px-6 rounded-lg transition-all flex justify-center items-center gap-2 group"
             >
-              {loading ? (<><Loader2 className="w-5 h-5 animate-spin" /><span>Analyzing Prospect...</span></>) : (<><Send className="w-4 h-4 group-hover:translate-x-1 transition-transform" /><span>Generate Pitch</span></>)}
+              {loading ? (
+                <><Loader2 className="w-5 h-5 animate-spin" /><span>Analyzing...</span></>
+              ) : (
+                <><Send className="w-4 h-4 group-hover:translate-x-1 transition-transform" /><span>Generate Pitch</span></>
+              )}
             </button>
           </div>
         </div>
 
-        {/* LOADING STATE (SHIMMER) */}
+        {/* LOADING STATE */}
         {loading && (
           <div className="space-y-4 animate-pulse">
             <div className="h-24 bg-zinc-900 rounded-xl border border-zinc-800" />

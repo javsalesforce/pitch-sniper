@@ -3,127 +3,106 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
 
-// 1. Initialize Supabase Client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error("CRITICAL: Supabase Keys are MISSING from .env.local");
-}
-
 const supabase = createClient(supabaseUrl || '', supabaseKey || '');
 
-export async function generatePitch(bio: string) {
+// Updated Signature: Accepts bio (text) AND/OR image (base64)
+export async function generatePitch(bio: string, imageBase64: string | null = null) {
   const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) return { error: "Configuration Error: Google API Key is missing." };
   
-  // Configuration Check
-  if (!apiKey) {
-    return { error: "Configuration Error: Google API Key is missing." };
-  }
-  
-  // Input Validation
-  if (!bio || bio.length > 5000) {
-    return { error: "Bio is too long (Max 5000 chars) or empty." };
+  // Validation: Must have at least one input
+  if (!bio && !imageBase64) {
+    return { error: "Please paste text OR upload a screenshot." };
   }
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     
+    // *** FIX: UPGRADED BACK TO GEMINI 2.0 ***
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.0-flash',
-      generationConfig: { 
-        responseMimeType: "application/json",
-        temperature: 0.75 // Slightly higher for more fluid writing
-      }
+      model: 'gemini-2.0-flash-exp', // Using the experimental 2.0 model for speed + multimodal
+      generationConfig: { responseMimeType: "application/json", temperature: 0.7 }
     });
 
-    // *** PROMPT ENGINEERING (V3: THE "PROFESSIONAL" UPDATE) ***
-    const systemPrompt = `
-      ROLE:
-      You are an elite Revenue Consultant. You do not "do marketing." You build "Client Acquisition Systems."
-      Your tone is: Professional, insightful, and value-driven. You are not a spammer; you are a peer.
-
-      INPUT DATA (Prospect Bio):
-      "${bio}"
-
-      ---
-
-      TASK 1: THE ROAST (The Icebreaker)
-      - Goal: Prove you read the bio.
-      - Tone: "Witty Observation" rather than "Mean Roast."
-      - Example: "26 family members? That's impressive, but I imagine Thanksgiving dinner feels a lot like a board meeting."
-      - Length: 1-2 sentences.
-
-      TASK 2: THE LINKEDIN DM (The Substantive Pitch)
-      - Context: A professional message to a business owner. It must feel written by a human expert, not a bot.
+    // Construct the Prompt Parts
+    const promptParts: any[] = [];
+    
+    // 1. Add the System Instructions
+    const systemInstructions = `
+      ROLE: Elite Revenue Consultant.
+      TASK: Analyze the prospect's bio (provided as text or image) and write a cold DM.
       
-      - STRUCTURE:
-        1. THE HOOK: Connect the roast/observation to a business challenge. (e.g., "Managing that many stakeholders is a full-time job in itself...")
-        2. THE PROBLEM (The Consequence): Explain WHY the current manual way is dangerous. (e.g., "The problem I see with most agencies is that relying on manual referrals creates 'feast or famine' revenue cycles.")
-        3. THE SOLUTION (The Mechanism): Explain HOW you fix it. Don't just say "AI." Explain the leverage. (e.g., "I build automated 'Brand Brains' that proactively nurture leads in your specific voice, ensuring your pipeline is full without you having to send manual DMs.")
-        4. THE ASK: A soft, professional inquiry. (e.g., "Would you be open to seeing a breakdown of how this system works?")
+      IF IMAGE IS PROVIDED:
+      1. Extract the "About" section text or Headline text from the screenshot.
+      2. Use that extracted text as the bio source.
 
-      - LENGTH CONSTRAINT: 
-        - The Body (Problem + Solution) should be 3-4 sentences total. 
-        - It needs enough "meat" to show competence.
+      TASK 1: THE ROAST (1 sentence, witty/pattern interrupt).
+      TASK 2: THE PITCH (Professional, Gap-Selling).
+         - HOOK: Acknowledges detail.
+         - PROBLEM: Why manual doesn't scale.
+         - SOLUTION: AI Agents/Brand Brains.
+         - ASK: Low friction.
 
-      NEGATIVE CONSTRAINTS (BANNED WORDS):
-      - "Unlock your potential"
-      - "Game changer"
-      - "Free consultation"
-      - "I hope this finds you well"
-      - "Synergy"
-      - "Rocket ship"
+      NEGATIVE CONSTRAINTS: No "Unlock potential", "Game changer", "Free consultation".
 
-      OUTPUT FORMAT (JSON):
+      OUTPUT JSON:
       {
-        "roast": "The roast...",
-        "pitch": {
-          "subject": "The Hook (First line shown in inbox)...",
-          "body": "The core message (Problem + Mechanism + Value)...",
-          "cta": "Low friction ask..."
-        }
+        "roast": "...",
+        "pitch": { "subject": "...", "body": "...", "cta": "..." }
       }
     `;
+    promptParts.push(systemInstructions);
 
-    // Execute AI Generation
-    const result = await model.generateContent(systemPrompt);
+    // 2. Add User Text (if any)
+    if (bio) promptParts.push(`USER TEXT INPUT: "${bio}"`);
+
+    // 3. Add User Image (if any)
+    if (imageBase64) {
+      // Remove header if present (e.g., "data:image/png;base64,")
+      const base64Data = imageBase64.split(',')[1] || imageBase64;
+      promptParts.push({
+        inlineData: {
+          data: base64Data,
+          mimeType: "image/png", 
+        },
+      });
+    }
+
+    // Execute
+    const result = await model.generateContent(promptParts);
     const text = result.response.text();
     const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
     const data = JSON.parse(cleanJson);
 
     // Normalization
     const pitchData = data.pitch || data.dm || {};
-    
     const finalResult = {
       roast: data.roast || "Bio analysis failed.",
       pitch: {
-        subject: pitchData.subject || pitchData.hook || "Question about your workflow...",
-        body: pitchData.body || pitchData.message || "I see you're doing great work, but are you scaling?",
-        cta: pitchData.cta || pitchData.ask || "Worth a chat?"
+        subject: pitchData.subject || "Question about your workflow...",
+        body: pitchData.body || "I see you're scaling, but are you automated?",
+        cta: pitchData.cta || "Worth a chat?"
       }
     };
 
-    // 2. SAVE TO SUPABASE
+    // Database Log (Fire & Forget)
     try {
-      const { error: dbError } = await supabase.from('leads').insert({
-        bio_text: bio,
+      await supabase.from('leads').insert({
+        bio_text: bio || "[Image Uploaded]",
         roast: finalResult.roast,
         pitch_subject: finalResult.pitch.subject,
         pitch_body: finalResult.pitch.body,
         pitch_cta: finalResult.pitch.cta
       });
-      
-      if (dbError) console.error("Supabase Save Error:", dbError);
-      
-    } catch (dbError) {
-      console.error("Database Connection Failed entirely:", dbError);
-    }
+    } catch (e) { console.error("DB Save Warning:", e); }
 
     return finalResult;
 
   } catch (error: any) {
-    console.error("AI Generation Error:", error);
-    return { error: `AI Generation Failed: ${error.message}` };
+    console.error("AI Error:", error);
+    // Helpful error message if the model name is wrong
+    return { error: `AI Generation Failed. (Model: gemini-2.0-flash-exp). Details: ${error.message}` };
   }
 }
